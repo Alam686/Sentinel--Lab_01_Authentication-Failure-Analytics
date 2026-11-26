@@ -1,0 +1,7 @@
+SigninLogs
+| where TimeGenerated > ago(60d)
+| extend HourOfDays = datetime_part('hour', TimeGenerated)
+| summarize TotalEventCounts = count(),
+            SuccessfulCounts = countif(ResultType == "0"),
+            UnSuccessfulCounts = countif(ResultType != "0") by HourOfDays
+| order by HourOfDays asc 

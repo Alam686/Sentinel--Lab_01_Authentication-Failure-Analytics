@@ -1,0 +1,9 @@
+let TotalEvents = toscalar(
+    SigninLogs
+    | where TimeGenerated > ago(60d)
+    | count);
+SigninLogs
+| where TimeGenerated > ago(60d)
+| summarize TotalEventsByResultType = count() by ResultType
+| extend PercentageOfEvents = round((TotalEventsByResultType * 100.0)/TotalEvents, 2) 
+| order by TotalEventsByResultType desc   

@@ -1,0 +1,5 @@
+SigninLogs
+| getschema
+| summarize
+    TotalColumns = count(),
+    DynamicColumns = make_set_if(ColumnName, DataType == "System.Object")

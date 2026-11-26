@@ -1,0 +1,14 @@
+let lookback = 60d;
+AuditLogs
+| where TimeGenerated > ago(lookback)
+| extend IngestionTime = ingestion_time()
+| where isnotnull(IngestionTime)
+| extend IngestionDelayMin =
+    datetime_diff('minute', IngestionTime, TimeGenerated)
+| summarize
+    EventCount = count(),
+    AvgIngestionDelayMin = round(avg(IngestionDelayMin), 2),
+    P95IngestionDelayMin = percentile(IngestionDelayMin, 95),
+    MaxIngestionDelayMin = max(IngestionDelayMin)
+    by bin(TimeGenerated, 5m)
+| order by TimeGenerated asc

@@ -1,0 +1,2 @@
+﻿TotalAuditCounts,TotalWithIngestionTimeCount,TotalWithoutIngestionTimeCount,"LatestCountTime [UTC]","EarliestCountTime [UTC]",AvgIngestionDelayMin,MedianIngestionDelayMin,P95IngestionDelayMin,MaxIngestionDelayMin,LatestEventAgeMin,LatestEvntAgeHour
+390,390,0,"17/11/2026, 1:32:00.098 am","11/11/2026, 4:31:21.132 pm",3,3,5,9,122,"2.03"

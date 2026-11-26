@@ -1,0 +1,43 @@
+let LookbackPeriod = 60d;
+let HighMissingThreshold = 50.0;
+SigninLogs
+| where TimeGenerated > ago(LookbackPeriod)
+| project 
+    UserPrincipalName,
+    UserId,
+    Identity,
+    IPAddress,
+    ResultType,
+    AppDisplayName,
+    ClientAppUsed,
+    AuthenticationDetails,
+    DeviceDetail,
+    LocationDetails,
+    ConditionalAccessStatus,
+    CorrelationId
+| project Packed_Field = pack_all()
+| mv-expand kind=array Packed_Field
+| extend 
+    FieldName = tostring(Packed_Field[0]),
+    RawValue = Packed_Field[1],
+    StringValue = trim(" ", tostring(Packed_Field[1]))
+| extend NormalizedString = iff(StringValue in ("{}", "[]"), "", StringValue)
+| summarize 
+    TotalEvents = count(),
+    NullCount = countif(isnull(RawValue)),
+    EmptyCount = countif(isnotnull(RawValue) and isempty(NormalizedString)) , 
+    PopulatedCount = countif(isnotnull(RawValue) and isnotempty(NormalizedString))
+    by FieldName
+| extend TotalMissingCount = NullCount + EmptyCount
+| extend MissingPercentage = round(todouble(TotalMissingCount) / TotalEvents * 100, 2)
+| extend CoverageFlag = iff(MissingPercentage >= HighMissingThreshold, "High Missing", "Normal / Low Missing")
+| project 
+    FieldName,
+    TotalEvents,
+    NullCount,
+    EmptyCount,
+    TotalMissingCount,
+    PopulatedCount,
+    MissingPercentage,
+    CoverageFlag
+| order by MissingPercentage desc, FieldName asc

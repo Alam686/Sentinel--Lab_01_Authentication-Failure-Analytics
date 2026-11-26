@@ -1,0 +1,25 @@
+
+//Query: Latest and Oldest Event Timestamp --> Data Freshness
+
+SigninLogs
+| where TimeGenerated > ago(60d)
+| summarize LatestEvent = max(TimeGenerated), OldestEvent = min(TimeGenerated)
+| extend LatestEventAgeSeconds = datetime_diff('second', now(), LatestEvent)
+| extend LatestEventAgeMinutes = round(LatestEventAgeSeconds/60.0,2)
+| extend StatusOfEvents = iff(LatestEventAgeMinutes > 10, "Delayed", "Fresh")
+
+//=====================================
+// Query 2: Ingestion Latency Analysis to Measure Delay over time
+
+SigninLogs
+| where TimeGenerated > ago(60d)
+| extend IngestionTime = ingestion_time()
+| where isnotnull( IngestionTime)
+| extend IngestionDelaySec = datetime_diff('second', IngestionTime, TimeGenerated)
+| summarize EventCount = count(),
+            AvgLatencySec = round(avg(IngestionDelaySec), 0),
+            P95DelaySec = percentile(IngestionDelaySec, 95),
+            MaxDelaySec = max(IngestionDelaySec),
+            MedianDelaySec = percentile(IngestionDelaySec, 50) by bin(TimeGenerated, 5m)
+| order by TimeGenerated asc 
+| render timechart 

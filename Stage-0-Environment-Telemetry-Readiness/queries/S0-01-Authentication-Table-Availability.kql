@@ -1,0 +1,15 @@
+union isfuzzy=true 
+(SigninLogs 
+| where TimeGenerated > ago(60d) 
+| summarize EventCount = count(), LatestEvent = max(TimeGenerated), OldestEvent = min(TimeGenerated)
+| extend Table = "SigninLogs"
+), (AADNonInteractiveUserSignInLogs
+| where TimeGenerated > ago(60d) 
+| summarize EventCount = count(), LatestEvent = max(TimeGenerated), OldestEvent = min(TimeGenerated)
+| extend Table = "AADNonInteractiveUserSignInLogs"
+), (
+    AuditLogs
+    | where TimeGenerated > ago(60d) 
+| summarize EventCount = count(), LatestEvent = max(TimeGenerated), OldestEvent = min(TimeGenerated)
+| extend Table = "AuditLogs"
+)

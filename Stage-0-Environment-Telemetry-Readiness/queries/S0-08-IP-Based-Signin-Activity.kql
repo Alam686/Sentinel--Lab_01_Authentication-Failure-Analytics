@@ -1,0 +1,7 @@
+SigninLogs
+| where TimeGenerated > ago(60d)
+| summarize TotalSignInEvents = count(),
+            UserPerIps = dcount(Identity),
+            TotalSuccessfulEvents = countif(ResultType == "0"),
+            NonSuccessfulEvents = countif(ResultType != "0") by IPAddress
+| order by TotalSignInEvents desc 

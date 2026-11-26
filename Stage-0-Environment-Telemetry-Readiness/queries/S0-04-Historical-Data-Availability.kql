@@ -1,0 +1,36 @@
+let lookback = 60d;
+union isfuzzy=true
+(
+    SigninLogs
+    | where TimeGenerated > ago(lookback)
+    | summarize 
+        TotalEvents = count(),
+        OldestEvents = min(TimeGenerated),
+        LatestEvents = max(TimeGenerated)
+    | extend Table = "SigninLogs"
+),
+(
+    AADNonInteractiveUserSignInLogs
+    | where TimeGenerated > ago(lookback)
+    | summarize 
+        TotalEvents = count(),
+        OldestEvents = min(TimeGenerated),
+        LatestEvents = max(TimeGenerated)
+    | extend Table = "AADNonInteractiveUserSignInLogs"
+),
+(
+    AuditLogs
+    | where TimeGenerated > ago(lookback)
+    | summarize 
+        TotalEvents = count(),
+        OldestEvents = min(TimeGenerated),
+        LatestEvents = max(TimeGenerated)
+    | extend Table = "AuditLogs"
+)
+| extend 
+    DaysSpanBetweenOld_Latest = datetime_diff('day', LatestEvents, OldestEvents),
+    LatestEventAgeDays = datetime_diff('day', now(), LatestEvents),
+    OldestEventAgeDays = datetime_diff('day', now(), OldestEvents),
+    LatestAgeHour = datetime_diff('hour', now(), LatestEvents)
+| project Table, TotalEvents, OldestEvents, LatestEvents, DaysSpanBetweenOld_Latest, LatestEventAgeDays, LatestAgeHour, OldestEventAgeDays
+| order by Table

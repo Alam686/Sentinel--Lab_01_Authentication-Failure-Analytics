@@ -1,0 +1,13 @@
+﻿FieldName,TotalEvents,NullCount,EmptyCount,TotalMissingCount,PopulatedCount,MissingPercentage,CoverageFlag
+AuthenticationDetails,96,0,2,2,94,"2.08","Normal / Low Missing"
+AppDisplayName,96,0,0,0,96,0,"Normal / Low Missing"
+ClientAppUsed,96,0,0,0,96,0,"Normal / Low Missing"
+ConditionalAccessStatus,96,0,0,0,96,0,"Normal / Low Missing"
+CorrelationId,96,0,0,0,96,0,"Normal / Low Missing"
+DeviceDetail,96,0,0,0,96,0,"Normal / Low Missing"
+IPAddress,96,0,0,0,96,0,"Normal / Low Missing"
+Identity,96,0,0,0,96,0,"Normal / Low Missing"
+LocationDetails,96,0,0,0,96,0,"Normal / Low Missing"
+ResultType,96,0,0,0,96,0,"Normal / Low Missing"
+UserId,96,0,0,0,96,0,"Normal / Low Missing"
+UserPrincipalName,96,0,0,0,96,0,"Normal / Low Missing"

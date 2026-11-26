@@ -1,0 +1,20 @@
+let lookback = 60d;
+AuditLogs
+| where TimeGenerated > ago(lookback)
+| extend TimeIngestion = ingestion_time()
+| extend EventIngestionDelayMin = datetime_diff('minute', TimeIngestion, TimeGenerated)
+| summarize TotalAuditCounts = count(),
+            TotalWithIngestionTimeCount = countif(isnotnull( TimeIngestion)),
+            TotalWithoutIngestionTimeCount = countif(isnull( TimeIngestion)),
+            LatestCountTime = max(TimeGenerated),
+            EarliestCountTime = min(TimeGenerated),
+            AvgIngestionDelayMin = round(avg(EventIngestionDelayMin), 0) ,
+            MedianIngestionDelayMin = percentile(EventIngestionDelayMin, 50),
+            P95IngestionDelayMin = percentile(EventIngestionDelayMin, 95),
+            MaxIngestionDelayMin = maxif(EventIngestionDelayMin, isnotnull( TimeIngestion))
+| extend LatestEventAgeMin = datetime_diff('minute', now(), LatestCountTime)
+| extend LatestEvntAgeHour = round(LatestEventAgeMin/60.0, 2)
+
+
+
+

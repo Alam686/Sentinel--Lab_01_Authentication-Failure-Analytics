@@ -1,0 +1,8 @@
+SigninLogs
+| where TimeGenerated > ago(60d)
+| summarize 
+            TotalEventPerUser = count(), 
+            SuccessfulEventPerUser = countif(ResultType == "0"), UnSuccessfulEventPerUser = countif(ResultType != "0"),
+            UniqueIpCounts = dcount(IPAddress),
+            UniqueIpPerUser_List = make_set(IPAddress) by Identity
+| order by TotalEventPerUser desc 

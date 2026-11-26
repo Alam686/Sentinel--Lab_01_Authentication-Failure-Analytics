@@ -1,0 +1,4 @@
+﻿EventCount,"LatestEvent [UTC]","OldestEvent [UTC]",Table
+861,"15/11/2026, 6:30:52.009 am","11/11/2026, 4:28:50.038 pm",AADNonIntractiveUserSigninLogs
+93,"15/11/2026, 6:30:11.819 am","11/11/2026, 4:37:07.934 pm",SigninLogs
+386,"14/11/2026, 6:26:43.671 am","11/11/2026, 4:31:21.132 pm",AuditLogs

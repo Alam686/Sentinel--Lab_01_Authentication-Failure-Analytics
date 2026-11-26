@@ -1,0 +1,29 @@
+let lookback = 60d;
+let SummaryTable =
+    union
+    (
+        SigninLogs
+        | where TimeGenerated > ago(lookback)
+        | extend Table = "SigninLogs"
+    ),
+    (
+        AADNonInteractiveUserSignInLogs
+        | where TimeGenerated > ago(lookback)
+        | extend Table = "AADNonInteractiveUserSignInLogs"
+    )
+    | summarize
+        TotalEvents = count(),
+        UniqueUsers = dcount(UserPrincipalName),
+        SuccessfulEvents = countif(ResultType == "0"),
+        NonSuccessfulEvents = countif(isnotempty(ResultType) and ResultType != "0"), 
+        UnknownResultEvents = countif(isempty(ResultType) or isnull( ResultType))
+        by Table;
+let TotalCount = toscalar (SummaryTable | summarize sum(TotalEvents));
+SummaryTable
+| extend
+    SuccessPercentage = round(100.0 * SuccessfulEvents / TotalEvents, 2),
+    NonSuccessPercentage = round(100.0 * NonSuccessfulEvents / TotalEvents, 2),
+    UnknownPercentage = round(100.0 * UnknownResultEvents / TotalEvents, 2),
+    OverallPercentage = round (100.0* TotalEvents / TotalCount, 2)
+| project Table, TotalEvents, UniqueUsers, OverallPercentage ,SuccessfulEvents, SuccessPercentage ,NonSuccessfulEvents, NonSuccessPercentage, UnknownResultEvents, UnknownPercentage
+| order by Table asc
