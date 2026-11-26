@@ -1,0 +1,66 @@
+SigninLogs
+| where TimeGenerated > ago(60d)
+| project EventTime=TimeGenerated,
+          EventId=Id,          
+          CorrelationId,
+          UPN=UserPrincipalName,
+          UserId,
+          SourceIP=IPAddress,
+          SignInResult=ResultType,
+          AuthenticationDetails,
+          DeviceDetail,
+          LocationDetails,
+          ConditionalAccessStatus,
+          ClientType=tostring(ClientAppUsed),
+          Application=tostring(AppDisplayName)
+| where isnotempty(AuthenticationDetails) and AuthenticationDetails != "[]"
+| extend AuthDetailParsed = parse_json(AuthenticationDetails)
+| extend AuthDetailType = gettype(AuthDetailParsed)
+| where AuthDetailType == "array"
+| mv-expand with_itemindex=AuthStepNumber AuthDetailExpand = 
+                       AuthDetailParsed
+| extend AuthExpandedType = gettype(AuthDetailExpand)
+| extend AuthenticationMethod = iff(AuthExpandedType == "dictionary",
+                 tostring(AuthDetailExpand.authenticationMethod), dynamic(null)),
+         AuthenticationResultDetail = iff(AuthExpandedType == "dictionary", 
+                 tostring(AuthDetailExpand.authenticationStepResultDetail), dynamic(null)),
+         AuthenticationSucceeded = iff(AuthExpandedType == "dictionary", 
+                 tobool(AuthDetailExpand.succeeded), dynamic(null))
+| extend LocationParsed = parse_json(LocationDetails)
+| extend LocationParsedType = gettype(LocationParsed)
+| extend Country = 
+                     iff(LocationParsedType == "dictionary", tostring(LocationParsed.countryOrRegion), dynamic(null)),
+         City = 
+                     iff(LocationParsedType == "dictionary", tostring(LocationParsed.city), dynamic(null))
+| extend DeviceParsed = parse_json(DeviceDetail)
+| extend DeviceParsedType = gettype(DeviceParsed)
+| extend DeviceOS = 
+                    iff(DeviceParsedType == "dictionary", tostring(DeviceParsed.operatingSystem), dynamic(null)),
+         Browser = 
+                    iff(DeviceParsedType == "dictionary", tostring(DeviceParsed.browser), dynamic(null)),
+         DeviceId = 
+                    iff(DeviceParsedType == "dictionary", tostring(DeviceParsed.deviceId), dynamic(null))
+| project EventTime,
+          EventId,
+          CorrelationId,
+          UPN,
+          UserId,
+          SourceIP,
+          SignInResult,
+          AuthenticationMethod,
+          AuthenticationSucceeded,
+          AuthenticationResultDetail,
+          DeviceOS,
+          Browser,
+          DeviceId,
+          Country,
+          City,
+          ConditionalAccessStatus,
+          Application,
+          ClientType
+          
+
+
+
+
+

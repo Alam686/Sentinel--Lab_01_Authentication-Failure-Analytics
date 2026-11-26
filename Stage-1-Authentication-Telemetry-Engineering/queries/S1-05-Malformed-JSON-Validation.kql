@@ -1,0 +1,142 @@
+datatable (TestCase: string, AuthenticationDetails: string) [
+    "ValidArray_Single", '[{"authenticationStepDateTime":"2026-11-22T03:37:05.6913506+00:00","authenticationMethod":"Previously satisfied","succeeded":true,"authenticationStepResultDetail":"First factor requirement satisfied by claim in the token","authenticationStepRequirement":"","StatusSequence":0,"RequestSequence":0}]',
+    "Invalid_PlainText", 'Authentication Failed',
+    "Valid_EmptyArray", '[]',
+    "Boolean_False_Scalar", 'false',
+    "Null_Scalar", 'null',
+    "Whitespace_String", " ",
+    "Truncated_Json_Start", '[{"authenticationMethod":"MFA"',
+    "Trailing_Comma_Json", '[{"authenticationMethod":"MFA","succeeded":true},]',
+    "Missing_Succeeded_Prop", '[{"authenticationMethod":"MFA","authenticationStepResultDetail":"Prompt sent"}]',
+    "Null_Succeeded_Prop", '[{"authenticationMethod":"MFA","succeeded":null,"authenticationStepResultDetail":"Prompt sent"}]',
+    "Empty_Succeeded_Prop", '[{"authenticationMethod":"MFA","succeeded":"","authenticationStepResultDetail":"Prompt sent"}]',
+    "Nested_Detail_Object", '[{"authenticationMethod":"MFA","succeeded":true,"authenticationStepResultDetail":{"code":500121,"msg":"MFA required"}}]',
+    "Valid_Multiple", '[{"authenticationStepDateTime":"2026-11-22T03:37:06.6913506+00:00","authenticationMethod":"Previously satisfied","succeeded":true,"authenticationStepResultDetail":"First factor requirement satisfied by claim in the token","authenticationStepRequirement":"","StatusSequence":0,"RequestSequence":0},{"authenticationStepDateTime":"2026-11-20T13:23:09.7246279+00:00","authenticationMethod":"Previously satisfied","succeeded":true,"authenticationStepResultDetail":"First factor requirement satisfied by claim in the token","authenticationStepRequirement":"","StatusSequence":0,"RequestSequence":0}]',
+    "InvalidArray", '[{"authenticationStepDateTime":"2026-11-20T13:23:10.7246279+00:00","authenticationMethod":"Previously satisfied","succeeded":true,"authenticationStepResultDetail":"First factor requirement satisfied by claim in the token","authenticationStepRequirement":"","StatusSequence":0,"RequestSequence":0"',
+    "Valid_Single_Object", '{"authenticationStepDateTime":"2026-11-18T16:36:44.8929636+00:00","authenticationMethod":"Previously satisfied","succeeded":true,"authenticationStepResultDetail":"First factor requirement satisfied by claim in the token","authenticationStepRequirement":"","StatusSequence":0,"RequestSequence":0}',
+    "Valid_Empty_Object", '{}',
+    "Scalar_Value", '123456',
+    "Empty_String", '""',
+    "Boolean_Value", 'true',
+    "String_true_Value", '"true"',
+    "Property_Mismatch", '[{"authenticationMethod":1234,"succeeded":"ture","authenticationStepResultDetail":"[{}]"}]',
+    "Malformed JSON", '[{"authenticationMethod:"1234","succeeded":"ture"",{"authenticationStepResultDetail":"[{}]"}}]'
+]
+| extend AuthDetailParsed = parse_json(AuthenticationDetails)
+| extend AuthDataType = gettype(AuthDetailParsed)
+| extend AuthArrayLength = iff(AuthDataType == "array", array_length(AuthDetailParsed), long(null))
+| extend TargetRecord = case(
+    AuthDataType == "array" and AuthArrayLength >= 1 and gettype(AuthDetailParsed[0]) == "dictionary", AuthDetailParsed[0],
+    AuthDataType == "dictionary", AuthDetailParsed,
+    dynamic(null)
+)
+| extend HasTargetRecord = isnotnull(TargetRecord) and gettype(TargetRecord) == "dictionary"
+| extend
+    AuthState = case(
+        isnull(AuthDetailParsed), "null value",
+        AuthDataType == "array" and AuthArrayLength == 0, "Valid array but no object",
+        AuthDataType == "array" and AuthArrayLength >= 1, "Valid array and has value",
+        AuthDataType  == "string" and AuthDetailParsed  == """", "Valid string with empty value",
+        AuthDataType == "string" and isempty(trim(@" ", tostring(AuthDetailParsed))), "Whitespace-only string",
+        AuthDataType == "dictionary" and array_length(bag_keys(AuthDetailParsed)) == 0, "Valid empty object",
+        AuthDataType == "dictionary" and array_length(bag_keys(AuthDetailParsed)) > 0, "Valid populated object",
+        AuthDataType == "string" and (
+            tostring(AuthDetailParsed) startswith "[" or
+            tostring(AuthDetailParsed) startswith "{" or
+            tostring(AuthDetailParsed) endswith "]" or
+            tostring(AuthDetailParsed) endswith "}"
+        ), "Malformed JSON",
+        AuthDataType == "bool" and AuthDetailParsed == true, "Valid boolean true",
+        AuthDataType == "bool" and AuthDetailParsed == false, "Valid boolean false",
+        AuthDataType == "long" and isnotempty(AuthDetailParsed), "Integer value",
+        AuthDataType == "string" and tolower(tostring(AuthDetailParsed)) == "true", "Valid string true value",
+        AuthDataType == "string" and tolower(tostring(AuthDetailParsed)) == "false", "Valid string false value",
+        AuthDataType == "string", "Plain text scalar",
+        "Other"
+    )
+| extend RawTrimmed = trim(@" ", AuthenticationDetails)
+| extend IsQuotedJsonString = strlen(RawTrimmed) >= 2
+    and RawTrimmed startswith "\""
+    and RawTrimmed endswith "\""
+| extend
+    JsonValidityClass = case(
+        AuthDataType in ("array", "dictionary"), "Valid JSON",
+        AuthDataType == "string" and IsQuotedJsonString, "Valid JSON",
+        AuthDataType == "bool", "Valid JSON",
+        AuthDataType in ("long", "real", "int"), "Valid JSON",
+        AuthDataType == "null", "Valid JSON",
+        AuthDataType == "string", "Invalid / Malformed JSON",
+        "Invalid / Malformed JSON"
+    )
+| extend
+    AuthMethod = iff(HasTargetRecord, TargetRecord.authenticationMethod, dynamic(null)),
+    AuthSucceeded = iff(HasTargetRecord, TargetRecord.succeeded, dynamic(null)),
+    AuthStep = iff(HasTargetRecord, TargetRecord.authenticationStepResultDetail, dynamic(null))
+| extend
+    AuthMethodPresent = case(
+        not(HasTargetRecord), "N/A",
+        not(bag_has_key(TargetRecord, "authenticationMethod")), "Missing",
+        isnull(AuthMethod), "Present (null)",
+        gettype(AuthMethod) == "string" and trim(@" ", tostring(AuthMethod)) == "", "Present (empty)",
+        "Present"
+    ),
+    AuthSucceededPresent = case(
+        not(HasTargetRecord), "N/A",
+        not(bag_has_key(TargetRecord, "succeeded")), "Missing",
+        isnull(AuthSucceeded), "Present (null)",
+        gettype(AuthSucceeded) == "string" and trim(@" ", tostring(AuthSucceeded)) == "", "Present (empty)",
+        "Present"
+    ),
+    AuthStepPresent = case(
+        not(HasTargetRecord), "N/A",
+        not(bag_has_key(TargetRecord, "authenticationStepResultDetail")), "Missing",
+        isnull(AuthStep), "Present (null)",
+        gettype(AuthStep) == "string" and trim(@" ", tostring(AuthStep)) == "", "Present (empty)",
+        "Present"
+    )
+| extend
+    AuthMethodActualType = iff(isnull(AuthMethod), "", gettype(AuthMethod)),
+    AuthSucceededActualType = iff(isnull(AuthSucceeded), "", gettype(AuthSucceeded)),
+    AuthStepActualType = iff(isnull(AuthStep), "", gettype(AuthStep))
+| extend
+    AuthMethodTypeStatus = case(
+        not(HasTargetRecord) or isnull(AuthMethod), "N/A",
+        AuthMethodActualType == "string", "Expected (string)",
+        strcat("Unexpected (", AuthMethodActualType, ", expected string)")
+    ),
+    AuthSucceededTypeStatus = case(
+        not(HasTargetRecord) or isnull(AuthSucceeded), "N/A",
+        AuthSucceededActualType == "bool", "Expected (bool)",
+        strcat("Unexpected (", AuthSucceededActualType, ", expected bool)")
+    ),
+    AuthStepTypeStatus = case(
+        not(HasTargetRecord) or isnull(AuthStep), "N/A",
+        AuthStepActualType == "string", "Expected (string)",
+        strcat("Unexpected (", AuthStepActualType, ", expected string)")
+    )
+| extend
+    ExtractionStatus = case(
+        JsonValidityClass == "Invalid / Malformed JSON", "Failed",
+        not(HasTargetRecord), "Safely handled",
+        AuthMethodPresent != "Present" or AuthSucceededPresent != "Present" or AuthStepPresent != "Present", "Safely handled",
+        AuthMethodTypeStatus startswith "Unexpected" or AuthSucceededTypeStatus startswith "Unexpected" or AuthStepTypeStatus startswith "Unexpected", "Safely handled",
+        "Successful"
+    )
+| project
+    TestCase,
+    AuthenticationDetails,
+    AuthDetailParsed,
+    AuthDataType,
+    AuthArrayLength,
+    JsonValidityClass,
+    AuthState,
+    AuthMethod,
+    AuthMethodPresent,
+    AuthMethodTypeStatus,
+    AuthSucceeded,
+    AuthSucceededPresent,
+    AuthSucceededTypeStatus,
+    AuthStep,
+    AuthStepPresent,
+    AuthStepTypeStatus,
+    ExtractionStatus

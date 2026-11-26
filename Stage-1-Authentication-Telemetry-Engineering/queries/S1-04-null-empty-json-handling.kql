@@ -1,0 +1,222 @@
+//====================================================================
+// S1-04: SigninLogs Null, Empty and JSON structure Audit ---1-Row-per-Event
+//=================================================================
+
+SigninLogs
+| where TimeGenerated > ago(60d)
+| project TimeGenerated, Id, CorrelationId, UserPrincipalName,AuthenticationDetails, LocationDetails, DeviceDetail, IPAddress
+
+// AuthenticationDetails:--- Parsing, Type, Array Structure---
+| extend AuthDetailsParsed = parse_json(AuthenticationDetails)
+| extend AuthDetailsDataParsedType = gettype(AuthDetailsParsed)
+| extend EmptyAuthDetails = isnotnull(AuthenticationDetails) and 
+                            isempty(tostring(AuthenticationDetails)),
+         NullAuthDetails  = isnull(AuthenticationDetails),
+         AuthArrayLength = iff(AuthDetailsDataParsedType == "array", array_length(AuthDetailsParsed), long(null))
+| extend EmptyAuthArray = AuthDetailsDataParsedType == "array" and
+                          AuthArrayLength == 0
+| extend AuthArrayLengthStatus = case(
+                AuthDetailsDataParsedType == "array" and AuthArrayLength == 0, "Empty Array", 
+                AuthDetailsDataParsedType == "array" and AuthArrayLength > 0, "Populated Array", 
+                AuthDetailsDataParsedType == "dictionary", "Object",
+                AuthDetailsDataParsedType == "string", "String",
+                AuthDetailsDataParsedType == "null", "Null", "Unexpected Type"  )
+// AuthenticationDetails: Property Extraction and Key Presence --- Index 0 & 1
+| extend AuthMethod_0 = tostring(iff(AuthArrayLength >= 1, AuthDetailsParsed[0].authenticationMethod, dynamic(null))),
+         AuthSucceeded_0 = tobool(iff(AuthArrayLength >= 1, AuthDetailsParsed[0].succeeded, dynamic(null))),
+         AuthStep_0 = tostring(iff(AuthArrayLength >= 1, AuthDetailsParsed[0].authenticationStepResultDetail, dynamic(null)))
+| extend AuthMethod_1 = tostring(iff(AuthArrayLength >= 2, AuthDetailsParsed[1].authenticationMethod,dynamic(null))),
+         AuthSucceeded_1 = tobool(iff(AuthArrayLength >= 2, AuthDetailsParsed[1].succeeded, dynamic(null))),
+         AuthStep_1 = tostring(iff(AuthArrayLength >= 2, AuthDetailsParsed[1].authenticationStepResultDetail, dynamic(null)))
+| extend HasMethod_0 = iff(AuthArrayLength >=1, bag_has_key(AuthDetailsParsed[0],"authenticationMethod"), false ),
+         HasStep_0 = iff(AuthArrayLength >=1, bag_has_key(AuthDetailsParsed[0],"authenticationStepResultDetail"), false ),
+         HasSucceeded_0 = iff(AuthArrayLength >=1, bag_has_key(AuthDetailsParsed[0],"succeeded"), false )
+| extend HasMethod_1 = iff(AuthArrayLength >=2, bag_has_key(AuthDetailsParsed[1],"authenticationMethod"), false ),
+         HasStep_1 = iff(AuthArrayLength >=2, bag_has_key(AuthDetailsParsed[1],"authenticationStepResultDetail"), false ),
+         HasSucceeded_1 = iff(AuthArrayLength >=2, bag_has_key(AuthDetailsParsed[1],"succeeded"), false )
+
+// AuthenticationDetails: Property Status Classification Index 0 & 1
+| extend MethodPropertyStatus_0 = 
+         case(HasMethod_0 == false, "Property does not exist", 
+         HasMethod_0 == true and isnull(AuthDetailsParsed[0].authenticationMethod), "Property exists but has null value", 
+         HasMethod_0 == true and isempty(tostring(AuthDetailsParsed[0].authenticationMethod)), "Property exists but has empty value", 
+         HasMethod_0 == true and (isnotnull(AuthDetailsParsed[0].authenticationMethod) and isnotempty(tostring(AuthDetailsParsed[0].authenticationMethod))), "Property exists and contain data", 
+         "Unknown")
+| extend StepPropertyStatus_0 = 
+         case(HasStep_0 == false,"Property does not exist",
+         HasStep_0 == true and isnull(AuthDetailsParsed[0].authenticationStepResultDetail), "Property exists but has null value",
+         HasStep_0 == true and isempty(tostring(AuthDetailsParsed[0].authenticationStepResultDetail)), "Property exists but has empty value",
+         HasStep_0 == true and (isnotnull(AuthDetailsParsed[0].authenticationStepResultDetail) and isnotempty(tostring(AuthDetailsParsed[0].authenticationStepResultDetail))), "Property exists and contain data", "Unknown" )
+| extend SucceededPropertyStatus_0 =
+          case(
+              HasSucceeded_0 == false,"Property does not exist",
+              HasSucceeded_0 == true 
+                     and isnull(AuthDetailsParsed[0].succeeded), "Property exists but has null value",
+              HasSucceeded_0 == true 
+                     and gettype(AuthDetailsParsed[0].succeeded) == "bool" and tobool( AuthDetailsParsed[0].succeeded) == true, "Property exists and value is boolean true",
+              HasSucceeded_0 == true 
+                     and gettype(AuthDetailsParsed[0].succeeded) == "bool" and tobool(AuthDetailsParsed[0].succeeded) == false, "Property exists and value is boolean false",
+              HasSucceeded_0== true
+                     and gettype(AuthDetailsParsed[0].succeeded) == "string" and isempty(tostring(AuthDetailsParsed[0].succeeded)), "Property exists and data type string but empty value",
+              HasSucceeded_0 == true 
+                     and gettype(AuthDetailsParsed[0].succeeded) == "string" and tolower(tostring(AuthDetailsParsed[0].succeeded)) == "false", "Property exists and value is string false",
+              HasSucceeded_0 == true 
+                     and gettype(AuthDetailsParsed[0].succeeded) == "string" and tolower(tostring(AuthDetailsParsed[0].succeeded)) == "true", "Property exists and value is string true", "Unknown Type" )
+| extend MethodPropertyStatus_1 = 
+         case(HasMethod_1 == false, "Property does not exist", 
+         HasMethod_1 == true and isnull(AuthDetailsParsed[1].authenticationMethod), "Property exists but has null value", 
+         HasMethod_1 == true and isempty(tostring(AuthDetailsParsed[1].authenticationMethod)), "Property exists but has empty value", 
+         HasMethod_1 == true and (isnotnull(AuthDetailsParsed[1].authenticationMethod) and  isnotempty(tostring(AuthDetailsParsed[1].authenticationMethod))), "Property exists and contain data", 
+         "Unknown")
+| extend StepPropertyStatus_1 = 
+         case(HasStep_1 == false,"Property does not exist",
+             HasStep_1 == true and isnull(AuthDetailsParsed[1].authenticationStepResultDetail), "Property exists but has null value",
+             HasStep_1 == true and isempty(tostring(AuthDetailsParsed[1].authenticationStepResultDetail)), "Property exists but has empty value",
+             HasStep_1 == true and (isnotnull(AuthDetailsParsed[1].authenticationStepResultDetail) and isnotempty(tostring(AuthDetailsParsed[1].authenticationStepResultDetail))), "Property exists and contain data", "Unknown" )
+| extend SucceededPropertyStatus_1 = 
+         case(
+              HasSucceeded_1 == false,"Property does not exist",
+              HasSucceeded_1 == true 
+                    and isnull(AuthDetailsParsed[1].succeeded), "Property exists but has null value",
+              HasSucceeded_1 == true 
+                    and gettype(AuthDetailsParsed[1].succeeded) == "bool" and tobool( AuthDetailsParsed[1].succeeded) == true, "Property exists and value is boolean true",
+              HasSucceeded_1 == true 
+                    and gettype(AuthDetailsParsed[1].succeeded) == "bool" and tobool(AuthDetailsParsed[1].succeeded) == false, "Property exists and value is boolean false",
+              HasSucceeded_1 == true 
+                   and gettype(AuthDetailsParsed[1].succeeded) == "string" and isempty(tostring(AuthDetailsParsed[1].succeeded)), "Property exists and data type string but empty value",
+              HasSucceeded_1 == true 
+                   and gettype(AuthDetailsParsed[1].succeeded) == "string" and tolower(tostring(AuthDetailsParsed[1].succeeded)) == "false", "Property exists and value is string false",
+              HasSucceeded_1 == true 
+                   and gettype(AuthDetailsParsed[1].succeeded) == "string" and tolower(tostring(AuthDetailsParsed[1].succeeded)) == "true", "Property exists and value is string true", "Unknown Type" )   
+
+// DeviceDetail: Type Inspection and Extraction
+| extend DeviceIdOriginalDataType = gettype(DeviceDetail.deviceId),
+         DisplayNameOriginalDataType = gettype(DeviceDetail.displayName),
+         OsOriginalDataType = gettype(DeviceDetail.operatingSystem),
+         BrowserOriginalDataType = gettype(DeviceDetail.browser),
+         TrustOriginalDataType = gettype(DeviceDetail.trustType),
+         IsCompliantOriginalDataType = gettype(DeviceDetail.isCompliant),
+         IsManagedOriginalDataType = gettype(DeviceDetail.isManaged)
+| extend    DeviceId = tostring(DeviceDetail.deviceId),
+            DisplayName = tostring(DeviceDetail.displayName),
+            OS = tostring(DeviceDetail.operatingSystem),
+            Browser = tostring(DeviceDetail.browser),
+            TrustType = tostring(DeviceDetail.trustType),           
+            IsCompliant = tobool(DeviceDetail.isCompliant),
+            IsManaged = tobool(DeviceDetail.isManaged)  
+
+// DeviceDetail: Property Status Classification
+| extend DeviceIdStatus = 
+                        case(
+                           bag_has_key(DeviceDetail, "deviceId") == false, "Property does not exist",
+                           bag_has_key(DeviceDetail, "deviceId") == true and 
+                           isnull(DeviceDetail.deviceId), "Property exists and has null value",
+                           bag_has_key(DeviceDetail, "deviceId") == true and 
+                           isempty(tostring(DeviceDetail.deviceId)), "Property exists and has empty string",
+                           bag_has_key(DeviceDetail, "deviceId") == true and gettype(DeviceDetail.deviceId) == "string" and strlen(tostring(DeviceDetail.deviceId)) >= 1, "Property exists and has populated data", "Unknown"
+                          ),
+         DisplayNameStatus = case(
+                           bag_has_key(DeviceDetail, "displayName") == false, "Property does not exist",
+                           bag_has_key(DeviceDetail, "displayName") == true and 
+                           isnull(DeviceDetail.displayName), "Property exists and has null value",
+                           bag_has_key(DeviceDetail, "displayName") == true and 
+                           isempty(tostring(DeviceDetail.displayName)), "Property exists and has empty string",
+                           bag_has_key(DeviceDetail, "displayName") == true and gettype(DeviceDetail.displayName) == "string" and strlen(tostring(DeviceDetail.displayName)) >= 1, "Property exists and has populated data", "Unknown"
+                          ),
+         BrowserStatus = case(
+                           bag_has_key(DeviceDetail, "browser") == false, "Property does not exist",
+                           bag_has_key(DeviceDetail, "browser") == true and 
+                           isnull(DeviceDetail.browser), "Property exists and has null value",
+                           bag_has_key(DeviceDetail, "browser") == true and 
+                           isempty(tostring(DeviceDetail.browser)), "Property exists and has empty string",
+                           bag_has_key(DeviceDetail, "browser") == true and gettype(DeviceDetail.browser) == "string" and strlen(tostring(DeviceDetail.browser)) >= 1, "Property exists and has populated data", "Unknown"
+                          ),
+         OSStatus = case(
+                           bag_has_key(DeviceDetail, "operatingSystem") == false, "Property does not exist",
+                           bag_has_key(DeviceDetail, "operatingSystem") == true and 
+                           isnull(DeviceDetail.operatingSystem), "Property exists and has null value",
+                           bag_has_key(DeviceDetail, "operatingSystem") == true and 
+                           isempty(tostring(DeviceDetail.operatingSystem)), "Property exists and has empty string",
+                           bag_has_key(DeviceDetail, "operatingSystem") == true and gettype(DeviceDetail.operatingSystem) == "string" and strlen(tostring(DeviceDetail.operatingSystem)) >= 1, "Property exists and has populated data", "Unknown"
+                          ),
+        TrustTypeStatus = case(
+                           bag_has_key(DeviceDetail, "trustType") == false, "Property does not exist",
+                           bag_has_key(DeviceDetail, "trustType") == true and 
+                           isnull(DeviceDetail.trustType), "Property exists and has null value",
+                           bag_has_key(DeviceDetail, "trustType") == true and 
+                           isempty(tostring(DeviceDetail.trustType)), "Property exists and has empty string",
+                            bag_has_key(DeviceDetail, "trustType") == true and gettype(DeviceDetail.trustType) == "string" and strlen(tostring(DeviceDetail.trustType)) >= 1, "Property exists and has populated data", "Unknown"
+                          ),
+        IsManagedStatus = case(
+                           bag_has_key(DeviceDetail, "isManaged") == false, "Property does not exist",
+                           bag_has_key(DeviceDetail, "isManaged") == true and isnull(DeviceDetail.isManaged), "Property exists but has null value",
+                           gettype(DeviceDetail.isManaged)== "bool" and  DeviceDetail.isManaged == true, "Property exists and has boolean true",
+                           gettype(DeviceDetail.isManaged)== "bool" and  DeviceDetail.isManaged == false, "Property exists and has boolean false",
+                           gettype(DeviceDetail.isManaged)== "string" and
+                           tolower(tostring(DeviceDetail.isManaged)) == "true", "Property exists and has string true",
+                           gettype(DeviceDetail.isManaged)== "string" and tolower(tostring(DeviceDetail.isManaged)) == "false", "Property exists and has string false",
+                           gettype(DeviceDetail.isManaged)== "string" and isempty(tostring(DeviceDetail.isManaged)), "Property exists but empty value", "Unknown"
+                          ),
+           IsCompliantStatus = case(
+                           bag_has_key(DeviceDetail, "isCompliant") == false, "Property does not exist",
+                           bag_has_key(DeviceDetail, "isCompliant") == true and isnull(DeviceDetail.isCompliant), "Property exists but has null value",
+                           gettype(DeviceDetail.isCompliant)== "bool" and  DeviceDetail.isCompliant== true, "Property exists and has boolean true",
+                           gettype(DeviceDetail.isCompliant)== "bool" and  DeviceDetail.isCompliant == false, "Property exists and has boolean false",
+                           gettype(DeviceDetail.isCompliant)== "string" and
+                           tolower(tostring(DeviceDetail.isCompliant)) == "true", "Property exists and has string true",
+                           gettype(DeviceDetail.isCompliant)== "string" and tolower(tostring(DeviceDetail.isCompliant)) == "false", "Property exists and has string false",
+                           gettype(DeviceDetail.isCompliant)== "string" and isempty(tostring(DeviceDetail.isCompliant)), "Property exists but empty value", "Unknown"
+                          )               
+// LocationDetails: Geo Coordinates Type Inspection and Types Extraction
+| extend LatitudeInDevice = LocationDetails.geoCoordinates.latitude,
+         LongitudeInDevice = LocationDetails.geoCoordinates.longitude,
+          GeoLatitudeProperty = bag_has_key(LocationDetails.geoCoordinates, "latitude"),
+         GeoLongitudeProperty = bag_has_key(LocationDetails.geoCoordinates, "longitude")
+| extend CountryOrRegionOriginalDataType = gettype(LocationDetails.countryOrRegion),
+         StateOriginalDataType = gettype(LocationDetails.state),
+         CityOriginalDataType = gettype(LocationDetails.city),
+         Geo_LatitudeOriginalDataType = gettype(LatitudeInDevice),
+         Geo_LongitudeOriginalDataType = gettype(LongitudeInDevice)
+| extend CountryOrRegion = tostring(LocationDetails.countryOrRegion),
+         State = tostring(LocationDetails.state),
+         City = tostring(LocationDetails.city),
+         Geo_Latitude = todouble(LocationDetails.geoCoordinates.latitude),
+         Geo_Longitude = todouble(LocationDetails.geoCoordinates.longitude)
+
+// LocationDetails: Property and Coordinate Status Classification
+| extend CountryOrRegionStatus = case(
+                            bag_has_key(LocationDetails,"countryOrRegion") == false, "Property does not exist",
+                            bag_has_key(LocationDetails, "countryOrRegion") == true and isnull(LocationDetails.countryOrRegion), "Property exists and has null value",                            
+                            bag_has_key(LocationDetails, "countryOrRegion") == true and isempty(tostring(LocationDetails.countryOrRegion)), "Property exists and has empty value",
+                            bag_has_key(LocationDetails, "countryOrRegion") == true and gettype(LocationDetails.countryOrRegion) == "string" and strlen(tostring(LocationDetails.countryOrRegion)) >= 1, "Property exists and has populated data", "Unknown"       
+                                       ),
+         StateStatus = case(
+                            bag_has_key(LocationDetails, "state") == false, "Property does not exist",
+                            bag_has_key(LocationDetails, "state") == true and isnull(LocationDetails.state), "Property exists and has null value",
+                            bag_has_key(LocationDetails,"state") == true and isempty(tostring(LocationDetails.state)), "Property exists and has empty value",
+                            bag_has_key(LocationDetails, "state") == true and gettype(LocationDetails.state) == "string" and strlen(tostring(LocationDetails.state)) >= 1, "Property exists and has populated data", "Unknown"  
+                               ), 
+         CityStatus = case(
+                            bag_has_key(LocationDetails, "city") == false, "Property does not exist",
+                            bag_has_key(LocationDetails, "city") == true and isnull(LocationDetails.city), "Property exists and has null value",
+                            bag_has_key(LocationDetails,"city") == true and isempty(tostring(LocationDetails.city)), "Property exists and has empty value",
+                            bag_has_key(LocationDetails, "city") == true and gettype(LocationDetails.city) == "string" and strlen(tostring(LocationDetails.city)) >= 1, "Property exists and has populated data", "Unknown"  
+                               ),
+          LatitudeStatus = case(
+                          GeoLatitudeProperty == false,"Property does not exist",
+                          GeoLatitudeProperty == true and isnull( LatitudeInDevice), "Property exists and has null value",
+                          Geo_LatitudeOriginalDataType == "string" and isempty(tostring(LatitudeInDevice)), "Property exists and has empty string",
+                          Geo_LatitudeOriginalDataType == "string" and isempty(trim(@" ", tostring(LatitudeInDevice))), "Property exists and has whitespace only",
+                          Geo_LatitudeOriginalDataType !in ("string", "double", "real", "long"), "Unexpected data type",
+                          isnull(todouble(LatitudeInDevice)), "Invalid numeric value",
+                          todouble(LatitudeInDevice) < -90 or todouble(LatitudeInDevice) > 90, "Latitude Out of valid range", "Valid latitude data"
+                           ) ,
+           LongitudeStatus = case(
+                          GeoLongitudeProperty == false,"Property does not exist",
+                          GeoLongitudeProperty == true and isnull( LongitudeInDevice), "Property exists and has null value",
+                          Geo_LongitudeOriginalDataType == "string" and isempty(tostring( LongitudeInDevice)), "Property exists and has empty string",
+                          Geo_LongitudeOriginalDataType == "string" and isempty(trim(@" ", tostring(LongitudeInDevice))), "Property exists and has whitespace only",
+                          Geo_LongitudeOriginalDataType !in ("string", "double", "real", "long"), "Unexpected data type",
+                          isnull(todouble(LongitudeInDevice)), "Invalid numeric value",
+                          todouble(LongitudeInDevice) < -180 or todouble(LongitudeInDevice) > 180, "Longitude Out of valid range", "Valid longitude data"
+                           )               

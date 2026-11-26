@@ -1,0 +1,20 @@
+SigninLogs
+| where TimeGenerated > ago(60d)
+| extend LocationDetails = parse_json(LocationDetails)
+| extend CountryOrRegion = tostring(LocationDetails.countryOrRegion), State = tostring(LocationDetails.state), City= tostring(LocationDetails.city) ,Latitude = todouble(LocationDetails.geoCoordinates.latitude), Longitude = todouble(LocationDetails.geoCoordinates.longitude)
+| extend LocationDataStatus = case(
+    isempty(CountryOrRegion) and isempty(State) and isempty(City), "All Location Fields Missing",
+    isempty(State) or isempty(City) or isempty(CountryOrRegion), "Partially Missing",
+    "Complete")
+| project TimeGenerated,
+          UserPrincipalName,
+          UserId,
+          IPAddress,
+          CorrelationId,
+          LocationDetails,
+          CountryOrRegion, 
+          State, 
+          City, 
+          Latitude, 
+          Longitude,
+          LocationDataStatus

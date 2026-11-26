@@ -1,0 +1,33 @@
+SigninLogs
+| where TimeGenerated > ago(60d)
+| extend ConditionalAccessPoliciesParsed = parse_json(tostring(ConditionalAccessPolicies))
+| mv-expand Policy = ConditionalAccessPoliciesParsed
+| extend PolicyName = tostring(Policy.displayName), 
+         PolicyID = tostring(Policy.id), 
+         PolicyResult = tostring(Policy.result),
+         ConditionsSatisfied = tostring(Policy.conditionsSatisfied),
+         ConditionsNotSatisfied = tostring(Policy.conditionsNotSatisfied),
+         GrantControls = coalesce(strcat_array(Policy.enforcedGrantControls, ", "), tostring(Policy.enforcedGrantContols), "None/Empty"),
+         SessionControls = coalesce(strcat_array(Policy.enforcedSessionControls, ", "), tostring(Policy.enforcedSessionControls), "None")
+| extend PolicyStatus = case(
+         PolicyResult =~ "success", "Applied", 
+         PolicyResult =~ "failure", "Failed", 
+         PolicyResult =~ "NotApplied", "NotApplied", 
+         PolicyResult)
+| project
+    TimeGenerated,
+    Id,
+    CorrelationId,
+    UserPrincipalName,
+    UserId,
+    IPAddress,
+    ConditionalAccessStatus,
+    PolicyID,
+    PolicyName,
+    PolicyResult,
+    PolicyStatus,
+    ConditionsSatisfied,
+    ConditionsNotSatisfied,
+    GrantControls,
+    SessionControls
+| order by TimeGenerated desc

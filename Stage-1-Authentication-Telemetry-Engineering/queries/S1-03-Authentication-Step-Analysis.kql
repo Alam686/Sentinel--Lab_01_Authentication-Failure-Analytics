@@ -1,0 +1,65 @@
+let lookback = 60d;
+let BaseData = SigninLogs
+| where TimeGenerated > ago(lookback)
+| extend ResultTypeStatus = 
+case(ResultType == "0", "Successful", isnotempty( ResultType),"Failed", "Unknown")
+| extend AuthParsed = parse_json(tostring(AuthenticationDetails))
+| mv-expand with_itemindex=StepNumber AuthDetails = AuthParsed
+| extend 
+    AuthMethods = coalesce(tostring(AuthDetails.authenticationMethod), "None"),
+    AuthStepsResult = tobool(AuthDetails.succeeded),
+    StepStatus = case(
+        tobool(AuthDetails.succeeded) == true, "Succeeded",
+        tobool(AuthDetails.succeeded) == false, "Failed",
+        "Unknown"
+    ),
+    AuthStepResultDetails = coalesce(
+        tostring(AuthDetails.authenticationStepResultDetail), 
+        "None"
+    )
+| extend StepVsOverall = case(
+    StepStatus == "Succeeded" and ResultTypeStatus == "Successful", 
+        "Step & Sign-In Succeeded",
+    StepStatus == "Succeeded" and ResultTypeStatus == "Failed", 
+        "Step Succeeded, Sign-In Failed",
+    StepStatus == "Failed" and ResultTypeStatus == "Failed", 
+        "Step & Sign-In Failed",
+    StepStatus == "Failed" and ResultTypeStatus == "Successful", 
+        "Step Failed, Sign-In Succeeded",
+    "Other"
+);
+let EventSummary = BaseData
+| summarize 
+    TotalAuthSteps = count(),
+    FirstSuccessStep = minif(StepNumber, StepStatus == "Succeeded"),
+    LastFailedStep = maxif(StepNumber, StepStatus == "Failed")
+    by Id, CorrelationId
+| extend EarlyPassLaterFail = iff(
+    isnotnull(FirstSuccessStep) 
+        and isnotnull(LastFailedStep) 
+        and FirstSuccessStep < LastFailedStep,
+    "Yes",
+    "No"
+);
+BaseData
+| join kind=inner (EventSummary) on Id, CorrelationId
+| project 
+    TimeGenerated,
+    UserPrincipalName,
+    UserId,
+    IPAddress,
+    Id,
+    CorrelationId,
+    ResultType,
+    ResultDescription = coalesce(ResultDescription, "No Description"),
+    ResultTypeStatus,
+    TotalAuthSteps,
+    StepOrder = StepNumber + 1,
+    AuthMethods,
+    AuthStepsResult,
+    StepStatus,
+    AuthStepResultDetails,
+    StepVsOverall,
+    EarlyPassLaterFail,
+    AuthenticationDetails
+| sort by TimeGenerated desc, CorrelationId asc, StepOrder asc

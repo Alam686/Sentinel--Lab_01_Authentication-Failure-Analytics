@@ -1,0 +1,39 @@
+let lookback = 60d;
+let BaseData = SigninLogs
+          | where TimeGenerated > ago(lookback)
+          | project TimeGenerated,
+                    Id,
+                    CorrelationId,
+                    UserPrincipalName,
+                    UserId,
+                    IPAddress,
+                    ResultType,
+                    AuthenticationDetails,
+                    DeviceDetail,
+                    LocationDetails,
+                    ConditionalAccessStatus,
+                    ClientAppUsed,
+                    AppDisplayName;
+let ValidArray = BaseData
+               | where isnotempty(AuthenticationDetails) and 
+                            AuthenticationDetails != "[]"
+               | extend AuthDetailParsed = parse_json(AuthenticationDetails)
+               | where gettype(AuthDetailParsed) == "array"
+               | extend AuthArrayLength = array_length(AuthDetailParsed);
+let ExpectedData = ValidArray
+                   | summarize ExpectedEventWithArray = count(),
+                           ExpectedExpandedRows = 
+                               sum(AuthArrayLength);             
+let ActualData = ValidArray
+                 | mv-expand AuthStep = AuthDetailParsed
+                 | summarize ActualExpandedRow = count();
+ExpectedData
+| extend JoinKey = 1
+| join kind=inner (
+       ActualData
+       | extend JoinKey = 1
+) on JoinKey
+| project  ExpectedEventWithArray,
+           ExpectedExpandedRows,
+           ActualExpandedRow,
+           DifferenceInExpansionRecord = ActualExpandedRow - ExpectedExpandedRows                          
